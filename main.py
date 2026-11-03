@@ -1,7 +1,54 @@
+import os
+import json
+from dotenv import load_dotenv
+from openai import OpenAI
 from fastapi.responses import HTMLResponse
 from fastapi import FastAPI
 
 app = FastAPI()
+load_dotenv()
+
+client = OpenAI(
+    api_key=os.getenv("ASI_ONE_API_KEY"),
+    base_url="https://api.asi1.ai/v1",
+)
+
+def parse_expense_with_ai(message: str):
+    prompt = f"""
+Extract the expense from this student message.
+
+Message: "{message}"
+
+Return ONLY valid JSON in this exact format:
+{{
+  "amount": 250,
+  "category": "food",
+  "note": "food"
+}}
+
+Allowed categories:
+food, transport, education, entertainment, shopping, bills, health, other
+
+If you cannot find an amount, return:
+{{"error": "missing_amount"}}
+"""
+
+    response = client.chat.completions.create(
+        model="asi1",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0,
+    )
+
+    text = response.choices[0].message.content.strip()
+
+    # Remove Markdown code fences if the AI adds them
+    if text.startswith("```"):
+        text = text.replace("```json", "").replace("```", "").strip()
+
+    return json.loads(text)
+
 
 budget = 10000
 expenses = []
@@ -52,6 +99,13 @@ def home():
           </tr>
           {expense_rows}
         </table>
+        
+        <h3>Tell CashGuard what you spent</h3>
+<form action="/ai-expense" method="get">
+  <input name="message" placeholder="I spent 250 on food" required>
+  <button>Add with AI</button>
+</form>
+        
         <h3>Can I afford this?</h3>
 <form action="/afford" method="get">
   <input name="amount" type="number" placeholder="Price" required>
@@ -145,6 +199,55 @@ def afford(amount: int, item: str):
         <p>This purchase uses: <b>{percent_of_remaining:.0f}%</b> of your remaining money</p>
         <p>Money left after purchase: ₹{remaining_after}</p>
         <p>{advice}</p>
+        <a href="/">Go back</a>
+      </body>
+    </html>
+    """
+    
+@app.get("/ai-expense", response_class=HTMLResponse)
+def ai_expense(message: str):
+    try:
+        result = parse_expense_with_ai(message)
+    except Exception as e:
+        return f"""
+        <html>
+          <body style="font-family: Arial; padding: 30px;">
+            <h1>AI error</h1>
+            <p>{e}</p>
+            <a href="/">Go back</a>
+          </body>
+        </html>
+        """
+
+    if "error" in result:
+        return f"""
+        <html>
+          <body style="font-family: Arial; padding: 30px;">
+            <h1>Could not understand expense</h1>
+            <p>Please include an amount, like: “I spent 250 on food.”</p>
+            <a href="/">Go back</a>
+          </body>
+        </html>
+        """
+
+    amount = int(result["amount"])
+    category = result["category"]
+    note = result["note"]
+
+    expenses.append({
+        "amount": amount,
+        "note": f"{note} ({category})"
+    })
+
+    remaining = budget - sum(e["amount"] for e in expenses)
+
+    return f"""
+    <html>
+      <body style="font-family: Arial; max-width: 700px; margin: auto; padding: 30px;">
+        <h1>✅ AI added your expense</h1>
+        <p>You spent ₹{amount} on {note}.</p>
+        <p>Category: {category}</p>
+        <h2>Money left: ₹{remaining}</h2>
         <a href="/">Go back</a>
       </body>
     </html>
