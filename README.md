@@ -2,6 +2,7 @@
 
 CashGuard is an AI budget agent that helps students manage their monthly allowance and avoid running out of money before the end of the month.
 
+You can access the website here: https://cashguard-g8nl.onrender.com/
 ## Problem
 
 Many students receive a fixed monthly allowance but lose track of spending. They often realize too late that they have overspent on food, transport, shopping, or entertainment.
