@@ -12,7 +12,7 @@ print("AGENT_SEED_PHRASE found:", "AGENT_SEED_PHRASE" in os.environ)
 
 register_chat_agent(
     "CashGuard",
-    "https://nimbly-wooing-overblown.ngrok-free.dev/",
+    "https://cashguard-g8nl.onrender.com/",
     active=True,
     credentials=RegistrationRequestCredentials(
         agentverse_api_key=os.environ["AGENTVERSE_KEY"],
