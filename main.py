@@ -1644,7 +1644,14 @@ async def agentverse_chat(envelope: Envelope):
     try:
         message = cast(ChatMessage, parse_envelope(envelope, ChatMessage))
 
-        user_text = message.text()
+        if isinstance(message, ChatMessage):
+            user_text = ""
+
+            for content in message.content:
+                if isinstance(content, TextContent):
+                    user_text += content.text
+        else:
+            user_text = str(message)
 
         reply = ask_asi_one(user_text)
 
