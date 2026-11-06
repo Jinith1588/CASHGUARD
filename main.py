@@ -3,6 +3,7 @@ import json
 import csv
 import io
 import sqlite3
+import uuid
 from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -1594,25 +1595,37 @@ async def agent_chat(envelope: Envelope):
 
         response_message = ChatMessage(
             timestamp=datetime.now(),
-            msg_id=envelope.payload if envelope.payload else "response",
+            msg_id=str(uuid.uuid4()),
             content=[TextContent(type="text", text=reply)],
         )
 
-        return response_message
+        return Envelope(
+            version=1,
+            sender=envelope.target,
+            target=envelope.sender,
+            content=response_message,
+        )
 
     except Exception:
         import traceback
         print(traceback.format_exc())
 
-        return ChatMessage(
+        fallback_message = ChatMessage(
             timestamp=datetime.now(),
-            msg_id="error-response",
+            msg_id=str(uuid.uuid4()),
             content=[
                 TextContent(
                     type="text",
                     text="Sorry, I had trouble understanding that. Please try again.",
                 )
             ],
+        )
+
+        return Envelope(
+            version=1,
+            sender=envelope.target,
+            target=envelope.sender,
+            content=fallback_message,
         )
 
 @app.get("/dashboard")
