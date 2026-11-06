@@ -10,6 +10,12 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+from uagents_core.contrib.protocols.chat import (
+    ChatMessage,
+    ChatAcknowledgement,
+    TextContent,
+)
+from uagents_core.envelope import Envelope
 
 @asynccontextmanager
 async def lifespan(app):
@@ -1572,6 +1578,42 @@ def chat(request: ChatRequest):
             "currency": get_currency()
         }
 
+@app.post("/agent-chat")
+async def agent_chat(envelope: Envelope):
+    try:
+        message = envelope.parse_content()
+
+        user_text = ""
+
+        if isinstance(message, ChatMessage):
+            for content in message.content:
+                if isinstance(content, TextContent):
+                    user_text += content.text
+
+        reply = ask_asi_one(user_text)
+
+        response_message = ChatMessage(
+            timestamp=datetime.now(),
+            msg_id=envelope.payload if envelope.payload else "response",
+            content=[TextContent(type="text", text=reply)],
+        )
+
+        return response_message
+
+    except Exception:
+        import traceback
+        print(traceback.format_exc())
+
+        return ChatMessage(
+            timestamp=datetime.now(),
+            msg_id="error-response",
+            content=[
+                TextContent(
+                    type="text",
+                    text="Sorry, I had trouble understanding that. Please try again.",
+                )
+            ],
+        )
 
 @app.get("/dashboard")
 def dashboard():
