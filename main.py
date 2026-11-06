@@ -17,13 +17,17 @@ from uagents_core.contrib.protocols.chat import (
     TextContent,
 )
 from uagents_core.envelope import Envelope
+from typing import cast
+from uagents_core.utils.messages import parse_envelope, send_message_to_agent
+from uagents_core.identity import Identity
+
 
 @asynccontextmanager
 async def lifespan(app):
     init_db()
     yield
 
-
+identity = Identity.from_seed(os.getenv("AGENT_SEED_PHRASE"), 0)
 load_dotenv()
 
 app = FastAPI(lifespan=lifespan)
@@ -1628,54 +1632,34 @@ async def agent_chat(envelope: Envelope):
             content=fallback_message,
         )
 
+from typing import cast
+from uagents_core.utils.messages import parse_envelope, send_message_to_agent
+from uagents_core.identity import Identity
+
+identity = Identity.from_seed(os.getenv("AGENT_SEED_PHRASE"), 0)
+
+
 @app.post("/")
 async def agentverse_chat(envelope: Envelope):
     try:
-        message = envelope.parse_content()
+        message = cast(ChatMessage, parse_envelope(envelope, ChatMessage))
 
-        user_text = ""
-
-        if isinstance(message, ChatMessage):
-            for content in message.content:
-                if isinstance(content, TextContent):
-                    user_text += content.text
+        user_text = message.text()
 
         reply = ask_asi_one(user_text)
 
-        response_message = ChatMessage(
-            timestamp=datetime.now(),
-            msg_id=str(uuid.uuid4()),
-            content=[TextContent(type="text", text=reply)],
+        send_message_to_agent(
+            destination=envelope.sender,
+            msg=ChatMessage([TextContent(reply)]),
+            sender=identity,
         )
 
-        return Envelope(
-            version=1,
-            sender=envelope.target,
-            target=envelope.sender,
-            content=response_message,
-        )
+        return {"status": "ok"}
 
     except Exception:
         import traceback
         print(traceback.format_exc())
-
-        fallback_message = ChatMessage(
-            timestamp=datetime.now(),
-            msg_id=str(uuid.uuid4()),
-            content=[
-                TextContent(
-                    type="text",
-                    text="Sorry, I had trouble understanding that. Please try again.",
-                )
-            ],
-        )
-
-        return Envelope(
-            version=1,
-            sender=envelope.target,
-            target=envelope.sender,
-            content=fallback_message,
-        )
+        return {"status": "error"}
 
 @app.get("/dashboard")
 def dashboard():
