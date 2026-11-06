@@ -1628,6 +1628,55 @@ async def agent_chat(envelope: Envelope):
             content=fallback_message,
         )
 
+@app.post("/")
+async def agentverse_chat(envelope: Envelope):
+    try:
+        message = envelope.parse_content()
+
+        user_text = ""
+
+        if isinstance(message, ChatMessage):
+            for content in message.content:
+                if isinstance(content, TextContent):
+                    user_text += content.text
+
+        reply = ask_asi_one(user_text)
+
+        response_message = ChatMessage(
+            timestamp=datetime.now(),
+            msg_id=str(uuid.uuid4()),
+            content=[TextContent(type="text", text=reply)],
+        )
+
+        return Envelope(
+            version=1,
+            sender=envelope.target,
+            target=envelope.sender,
+            content=response_message,
+        )
+
+    except Exception:
+        import traceback
+        print(traceback.format_exc())
+
+        fallback_message = ChatMessage(
+            timestamp=datetime.now(),
+            msg_id=str(uuid.uuid4()),
+            content=[
+                TextContent(
+                    type="text",
+                    text="Sorry, I had trouble understanding that. Please try again.",
+                )
+            ],
+        )
+
+        return Envelope(
+            version=1,
+            sender=envelope.target,
+            target=envelope.sender,
+            content=fallback_message,
+        )
+
 @app.get("/dashboard")
 def dashboard():
     return {
