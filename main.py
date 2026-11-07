@@ -4,6 +4,7 @@ import csv
 import io
 import sqlite3
 import uuid
+import re
 from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -11,34 +12,39 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+from typing import cast
+
 from uagents_core.contrib.protocols.chat import (
     ChatMessage,
     ChatAcknowledgement,
     TextContent,
 )
 from uagents_core.envelope import Envelope
-from typing import cast
 from uagents_core.utils.messages import parse_envelope, send_message_to_agent
 from uagents_core.identity import Identity
 
+
+load_dotenv()
+
+identity = Identity.from_seed(os.getenv("AGENT_SEED_PHRASE"), 0)
 
 @asynccontextmanager
 async def lifespan(app):
     init_db()
     yield
 
-identity = Identity.from_seed(os.getenv("AGENT_SEED_PHRASE"), 0)
-load_dotenv()
-
 app = FastAPI(lifespan=lifespan)
+
 
 client = OpenAI(
     api_key=os.getenv("ASI_ONE_API_KEY"),
     base_url="https://api.asi1.ai/v1",
 )
 
+
 DB_NAME = "cashguard.db"
 chat_history = []
+
 
 CATEGORIES = [
     "food",
@@ -70,8 +76,8 @@ def init_db():
             expense_date TEXT NOT NULL,
             created_at TEXT NOT NULL
         )
-    """)  
-    
+    """)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS user_settings (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -81,10 +87,8 @@ def init_db():
 
     conn.execute("""
         INSERT OR IGNORE INTO user_settings (id, currency)
-            VALUES (1, 'INR')
+        VALUES (1, 'INR')
     """)
-    
-    
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS incomes (
@@ -150,16 +154,25 @@ def next_month_start(reference=None):
     reference = reference or date.today()
 
     if reference.month == 12:
-        return reference.replace(year=reference.year + 1, month=1, day=1)
+        return reference.replace(
+            year=reference.year + 1,
+            month=1,
+            day=1
+        )
 
-    return reference.replace(month=reference.month + 1, day=1)
+    return reference.replace(
+        month=reference.month + 1,
+        day=1
+    )
 
 
 def get_budget():
     conn = get_db()
+
     row = conn.execute(
         "SELECT monthly_budget FROM settings WHERE id = 1"
     ).fetchone()
+
     conn.close()
 
     return row["monthly_budget"]
@@ -167,10 +180,12 @@ def get_budget():
 
 def set_budget(amount):
     conn = get_db()
+
     conn.execute(
         "UPDATE settings SET monthly_budget = ? WHERE id = 1",
         (amount,)
     )
+
     conn.commit()
     conn.close()
 
@@ -202,7 +217,6 @@ def add_expense(amount, category, note, expense_date):
     if limit is not None and spent > limit:
         currency = get_currency()
 
-
         budget_warning = (
             f"⚠️ You have crossed your {category} budget. "
             f"Spent {currency} {spent:,.0f} of {currency} {limit:,.0f}."
@@ -216,6 +230,7 @@ def add_expense(amount, category, note, expense_date):
         ),
         "budget_warning": budget_warning
     }
+
 
 def get_currency():
     conn = get_db()
@@ -242,6 +257,7 @@ def set_currency(currency):
 
     conn.commit()
     conn.close()
+
 
 def add_income(amount, source, income_date):
     conn = get_db()
@@ -274,9 +290,9 @@ def get_month_income(reference=None):
         AND income_date < ?
         ORDER BY income_date DESC
     """, (
-    start,
-    next_month_start().isoformat()
-)).fetchall()
+        start,
+        next_month_start().isoformat()
+    )).fetchall()
 
     conn.close()
 
@@ -366,9 +382,9 @@ def get_month_expenses(reference=None):
         AND expense_date < ?
         ORDER BY expense_date DESC
     """, (
-    start,
-    next_month_start().isoformat()
-)).fetchall()
+        start,
+        next_month_start().isoformat()
+    )).fetchall()
 
     conn.close()
 
@@ -431,9 +447,9 @@ def parse_date(text):
             continue
 
     raise ValueError(
-    "Please provide a clear date, such as today, yesterday, "
-    "or DD/MM/YYYY."
-)
+        "Please provide a clear date, such as today, yesterday, "
+        "or DD/MM/YYYY."
+    )
 
 
 def get_budget_status():
@@ -812,6 +828,7 @@ def get_monthly_trend():
 
     return trend
 
+
 def json_safe(value):
     if isinstance(value, set):
         return list(value)
@@ -833,7 +850,6 @@ def json_safe(value):
 
 def run_tool(tool_name, arguments):
     try:
-    
         if tool_name == "get_monthly_report":
             return {
                 "budget": get_budget_status(),
@@ -841,7 +857,7 @@ def run_tool(tool_name, arguments):
                 "upcoming_bills": get_upcoming_bills(30),
                 "savings_goals": get_savings_goals()
             }
-        
+
         if tool_name == "add_expense":
             expense_result = add_expense(
                 float(arguments["amount"]),
@@ -1004,6 +1020,7 @@ def run_tool(tool_name, arguments):
                     arguments.get("max_amount")
                 )
             }
+
         if tool_name == "set_currency":
             currency = str(arguments["currency"]).upper().strip()
 
@@ -1013,7 +1030,7 @@ def run_tool(tool_name, arguments):
                 "success": True,
                 "currency": currency
             }
-            
+
         return {"error": "Unknown tool"}
 
     except Exception as error:
@@ -1123,14 +1140,13 @@ Currency:
 """
 
     tools = [
-        
         {
-            "type":"function",
+            "type": "function",
             "function": {
                 "name": "set_currency",
                 "description": (
-                    "Change the stuednt's preferred display using "
-                    "an ISO 4217 currency code"
+                    "Change the student's preferred display currency using "
+                    "an ISO 4217 currency code."
                 ),
                 "parameters": {
                     "type": "object",
@@ -1146,8 +1162,8 @@ Currency:
             "function": {
                 "name": "get_monthly_report",
                 "description": (
-                    "Get a complete monthly financial report including spending, "
-                    "insights, projection, and advice."
+                    "Get a complete monthly financial report including "
+                    "spending, insights, projection, and advice."
                 ),
                 "parameters": {
                     "type": "object",
@@ -1156,7 +1172,6 @@ Currency:
                 }
             }
         },
-        
         {
             "type": "function",
             "function": {
@@ -1557,10 +1572,59 @@ class ChatRequest(BaseModel):
     message: str
 
 
+def calculate_expense_total(message: str):
+    matches = re.findall(
+        r"(₹|Rs\.?|\$|€|£)\s?(\d+(?:\.\d+)?)",
+        message,
+        flags=re.IGNORECASE,
+    )
+
+    if not matches:
+        return None
+
+    symbols = {
+        "₹": "₹",
+        "Rs": "₹",
+        "Rs.": "₹",
+        "$": "$",
+        "€": "€",
+        "£": "£",
+    }
+
+    currency_symbol = symbols.get(matches[0][0], "₹")
+    values = [float(match[1]) for match in matches]
+    total = sum(values)
+
+    items = [f"{currency_symbol}{value:g}" for value in values]
+    calculation = " + ".join(items) + f" = {currency_symbol}{total:g}"
+
+    return {
+        "total": total,
+        "calculation": calculation,
+        "currency_symbol": currency_symbol,
+    }
+
+
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
-        reply = ask_asi_one(request.message)
+        calculation = calculate_expense_total(request.message)
+
+        if calculation:
+            prompt = f"""
+The user said: "{request.message}"
+
+Use this verified calculation:
+{calculation["calculation"]}
+
+The correct total is {calculation["total"]}.
+Respond briefly. Confirm the total and provide one practical budgeting tip.
+Do not calculate the total yourself.
+"""
+        else:
+            prompt = request.message
+
+        reply = ask_asi_one(prompt)
         currency = get_currency()
 
         return {
@@ -1583,58 +1647,6 @@ def chat(request: ChatRequest):
             "currency": get_currency()
         }
 
-@app.post("/agent-chat")
-async def agent_chat(envelope: Envelope):
-    try:
-        message = envelope.parse_content()
-
-        user_text = ""
-
-        if isinstance(message, ChatMessage):
-            for content in message.content:
-                if isinstance(content, TextContent):
-                    user_text += content.text
-
-        reply = ask_asi_one(user_text)
-
-        response_message = ChatMessage(
-            timestamp=datetime.now(),
-            msg_id=str(uuid.uuid4()),
-            content=[TextContent(type="text", text=reply)],
-        )
-
-        send_message_to_agent(
-            destination=envelope.sender,
-            msg=response_message,
-            sender=identity,
-        )
-
-        return {"status": "ok"}
-
-
-    except Exception:
-        import traceback
-        print(traceback.format_exc())
-
-        fallback_message = ChatMessage(
-            timestamp=datetime.now(),
-            msg_id=str(uuid.uuid4()),
-            content=[
-                TextContent(
-                    type="text",
-                    text="Sorry, I had trouble understanding that. Please try again.",
-                )
-            ],
-        )
-
-        return {"status": "error"}
-
-from typing import cast
-from uagents_core.utils.messages import parse_envelope, send_message_to_agent
-from uagents_core.identity import Identity
-
-identity = Identity.from_seed(os.getenv("AGENT_SEED_PHRASE"), 0)
-
 
 @app.post("/")
 async def agentverse_chat(envelope: Envelope):
@@ -1650,7 +1662,23 @@ async def agentverse_chat(envelope: Envelope):
         else:
             user_text = str(message)
 
-        reply = ask_asi_one(user_text)
+        calculation = calculate_expense_total(user_text)
+
+        if calculation:
+            prompt = f"""
+The user said: "{user_text}"
+
+Use this verified calculation:
+{calculation["calculation"]}
+
+The correct total is {calculation["total"]}.
+Respond briefly. Confirm the total and provide one practical budgeting tip.
+Do not calculate the total yourself.
+"""
+        else:
+            prompt = user_text
+
+        reply = ask_asi_one(prompt)
 
         response_message = ChatMessage(
             timestamp=datetime.now(),
@@ -1658,38 +1686,19 @@ async def agentverse_chat(envelope: Envelope):
             content=[TextContent(type="text", text=reply)],
         )
 
-        return Envelope(
-            version=envelope.version,
-            sender=envelope.target,
-            target=envelope.sender,
-            session=envelope.session,
-            schema_digest=envelope.schema_digest,
-            content=response_message,
+        send_message_to_agent(
+            destination=envelope.sender,
+            msg=response_message,
+            sender=identity,
         )
+
+        return {"status": "ok"}
 
     except Exception:
         import traceback
         print(traceback.format_exc())
+        return {"status": "error"}
 
-        fallback_message = ChatMessage(
-            timestamp=datetime.now(),
-            msg_id=str(uuid.uuid4()),
-            content=[
-                TextContent(
-                    type="text",
-                    text="Sorry, I had trouble understanding that. Please try again.",
-                )
-            ],
-        )
-
-        return Envelope(
-            version=envelope.version,
-            sender=envelope.target,
-            target=envelope.sender,
-            session=envelope.session,
-            schema_digest=envelope.schema_digest,
-            content=fallback_message,
-        )
 
 @app.get("/dashboard")
 def dashboard():
@@ -1952,7 +1961,7 @@ def home():
             border-radius: 6px 6px 0 0;
             width: 100%;
           }
-          
+
           header h1,
           header p,
           .tab {
@@ -1987,7 +1996,7 @@ def home():
 
           body.dark .message.user {
             color: #ffffff;
-          }              
+          }
         </style>
       </head>
       <body>
@@ -2047,8 +2056,7 @@ def home():
         </div>
 
         <script>
-        
-        const currencySymbols = {
+          const currencySymbols = {
             INR: "₹",
             USD: "$",
             EUR: "€",
@@ -2057,23 +2065,24 @@ def home():
             SGD: "S$",
             AUD: "A$",
             CAD: "C$"
-        };
-        
-        function esc(text) {
-  return String(text || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+          };
 
-function updateCurrencyLogo(currency) {
-  const logo = document.getElementById("currency-logo");
-  const selectedCurrency = currency || "INR";
+          function esc(text) {
+            return String(text || "")
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/"/g, "&quot;")
+              .replace(/'/g, "&#39;");
+          }
 
-  logo.textContent = selectedCurrency;
-}
+          function updateCurrencyLogo(currency) {
+            const logo = document.getElementById("currency-logo");
+            const selectedCurrency = currency || "INR";
+
+            logo.textContent = selectedCurrency;
+          }
+
           async function sendMessage(event) {
             event.preventDefault();
 
@@ -2096,15 +2105,15 @@ function updateCurrencyLogo(currency) {
               const data = await response.json();
 
               removeThinking();
-              
-              if (data.currency) {
-                  updateCurrencyLogo(data.currency);
-              }
-              addMessage(
-                  data.reply || "Sorry, I could not get a response.",
-                  "agent"
-              )
 
+              if (data.currency) {
+                updateCurrencyLogo(data.currency);
+              }
+
+              addMessage(
+                data.reply || "Sorry, I could not get a response.",
+                "agent"
+              );
             } catch (error) {
               removeThinking();
               addMessage(
@@ -2136,15 +2145,12 @@ function updateCurrencyLogo(currency) {
 
             chat.appendChild(div);
             document.querySelector("main").scrollTop =
-                document.querySelector("main").scrollHeight;
+              document.querySelector("main").scrollHeight;
           }
 
           function showView(view) {
             const chatView = document.getElementById("chat-view");
-            const dashboardView = document.getElementById(
-              "dashboard-view"
-            );
-
+            const dashboardView = document.getElementById("dashboard-view");
             const buttons = document.querySelectorAll(".tab");
 
             if (view === "chat") {
@@ -2162,36 +2168,36 @@ function updateCurrencyLogo(currency) {
           }
 
           function toggleDarkMode() {
-  const body = document.body;
-  body.classList.toggle("dark");
+            const body = document.body;
+            body.classList.toggle("dark");
 
-  const isDark = body.classList.contains("dark");
-  localStorage.setItem("cashguard-theme", isDark ? "dark" : "light");
-}
+            const isDark = body.classList.contains("dark");
+            localStorage.setItem("cashguard-theme", isDark ? "dark" : "light");
+          }
 
-function applySavedTheme() {
-  const savedTheme = localStorage.getItem("cashguard-theme");
+          function applySavedTheme() {
+            const savedTheme = localStorage.getItem("cashguard-theme");
 
-  if (savedTheme === "dark") {
-    document.body.classList.add("dark");
-    return;
-  }
+            if (savedTheme === "dark") {
+              document.body.classList.add("dark");
+              return;
+            }
 
-  if (savedTheme === "light") {
-    document.body.classList.remove("dark");
-    return;
-  }
+            if (savedTheme === "light") {
+              document.body.classList.remove("dark");
+              return;
+            }
 
-  const prefersDark = window.matchMedia(
-    "(prefers-color-scheme: dark)"
-  ).matches;
+            const prefersDark = window.matchMedia(
+              "(prefers-color-scheme: dark)"
+            ).matches;
 
-  if (prefersDark) {
-    document.body.classList.add("dark");
-  }
-}
+            if (prefersDark) {
+              document.body.classList.add("dark");
+            }
+          }
 
-applySavedTheme();
+          applySavedTheme();
 
           async function loadDashboard() {
             const dashboard = document.getElementById("dashboard");
@@ -2208,19 +2214,18 @@ applySavedTheme();
               const trend = data.trend;
               const currency = data.currency || "INR";
 
-
               function formatMoney(amount) {
                 return new Intl.NumberFormat("en-IN", {
-                    style: "currency",
-                    currency: currency
+                  style: "currency",
+                  currency: currency
                 }).format(amount);
               }
 
               const spentPercent = budget.monthly_budget
                 ? Math.min(
-                    (budget.total_spent / budget.monthly_budget) * 100,
-                    100
-                  )
+                  (budget.total_spent / budget.monthly_budget) * 100,
+                  100
+                )
                 : 0;
 
               const maxWeekly = Math.max(
@@ -2242,7 +2247,7 @@ applySavedTheme();
                     ></div>
                   </div>
                   <div class="small">
-                    Remaining:  ${formatMoney(budget.remaining_balance)}
+                    Remaining: ${formatMoney(budget.remaining_balance)}
                     • Safe daily spend:
                     ${formatMoney(budget.safe_daily_spend)}
                   </div>
@@ -2257,17 +2262,17 @@ applySavedTheme();
                   ${
                     insights.top_categories.length
                       ? insights.top_categories.map(item => `
-                          <div class="small">
-                            ${item.category}: ${formatMoney(item.amount)}
-                            (${item.percentage}%)
-                          </div>
-                          <div class="bar">
-                            <div
-                              class="bar-fill"
-                              style="width: ${item.percentage}%"
-                            ></div>
-                          </div>
-                        `).join("")
+                        <div class="small">
+                          ${item.category}: ${formatMoney(item.amount)}
+                          (${item.percentage}%)
+                        </div>
+                        <div class="bar">
+                          <div
+                            class="bar-fill"
+                            style="width: ${item.percentage}%"
+                          ></div>
+                        </div>
+                      `).join("")
                       : "<div class='small'>No expenses yet.</div>"
                   }
                 </div>
@@ -2308,18 +2313,18 @@ applySavedTheme();
                   ${
                     data.recent.length
                       ? data.recent.map(item => `
-                          <div class="transaction">
-                            <div>
-                              <div>${esc(item.note)}</div>
-                              <div class="small">
-                                ${esc(item.category)} • ${item.expense_date}
-                              </div>
-                            </div>
-                            <div>
-                              ₹${formatMoney(item.amount)}
+                        <div class="transaction">
+                          <div>
+                            <div>${esc(item.note)}</div>
+                            <div class="small">
+                              ${esc(item.category)} • ${item.expense_date}
                             </div>
                           </div>
-                        `).join("")
+                          <div>
+                            ${formatMoney(item.amount)}
+                          </div>
+                        </div>
+                      `).join("")
                       : "<div class='small'>No expenses yet.</div>"
                   }
                 </div>
@@ -2337,33 +2342,22 @@ applySavedTheme();
                   </button>
                 </div>
               `;
-
             } catch (error) {
               dashboard.innerHTML =
                 "Could not load dashboard. Please try again.";
             }
           }
-          
-        window.addEventListener("DOMContentLoaded", async () => {
+
+          window.addEventListener("DOMContentLoaded", async () => {
             try {
-                const response = await fetch("/dashboard");
-                const data = await response.json();
-                
-                const currency = data.currency || "INR";
+              const response = await fetch("/dashboard");
+              const data = await response.json();
 
-function formatMoney(amount) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: currency
-  }).format(amount);
-}
-
-                updateCurrencyLogo(data.currency || "INR");
+              updateCurrencyLogo(data.currency || "INR");
             } catch (error) {
               updateCurrencyLogo("INR");
             }
-        });
-          
+          });
         </script>
       </body>
     </html>
