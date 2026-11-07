@@ -1651,23 +1651,34 @@ Do not calculate the total yourself.
 @app.post("/")
 async def agentverse_chat(envelope: Envelope):
     try:
-        message = cast(ChatMessage, parse_envelope(envelope, ChatMessage))
+        message = parse_envelope(envelope, ChatMessage)
 
-        if isinstance(message, ChatMessage):
-            user_text = ""
+        if isinstance(message, ChatAcknowledgement):
+            print("Received acknowledgement — ignoring")
+            return {"status": "ok"}
 
-            for content in message.content:
-                if isinstance(content, TextContent):
-                    user_text += content.text
-        else:
-            user_text = str(message)
+        if not isinstance(message, ChatMessage):
+            print(f"Received unsupported message type: {type(message)}")
+            return {"status": "ok"}
+
+        user_text = ""
+
+        for content in message.content:
+            if isinstance(content, TextContent):
+                user_text += content.text
+
+        user_text = user_text.strip()
+
+        if not user_text:
+            print("Received empty ChatMessage — ignoring")
+            return {"status": "ok"}
 
         print(f"Received Agentverse message: {user_text}")
 
         acknowledgement = ChatAcknowledgement(
-    timestamp=datetime.now(),
-    acknowledged_msg_id=message.msg_id,
-)
+            timestamp=datetime.now(),
+            acknowledged_msg_id=message.msg_id,
+        )
 
         send_message_to_agent(
             destination=envelope.sender,
