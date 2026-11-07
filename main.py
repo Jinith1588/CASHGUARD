@@ -1655,13 +1655,11 @@ async def agentverse_chat(envelope: Envelope):
 
         reply = ask_asi_one(user_text)
 
-        send_message_to_agent(
-            destination=envelope.sender,
-            msg=ChatMessage([TextContent(reply)]),
-            sender=identity,
+        return ChatMessage(
+            timestamp=datetime.now(),
+            msg_id=str(uuid.uuid4()),
+            content=[TextContent(type="text", text=reply)],
         )
-
-        return {"status": "ok"}
 
     except Exception:
         import traceback
