@@ -1665,10 +1665,9 @@ async def agentverse_chat(envelope: Envelope):
         print(f"Received Agentverse message: {user_text}")
 
         acknowledgement = ChatAcknowledgement(
-            timestamp=datetime.now(),
-            msg_id=str(uuid.uuid4()),
-            acknowledged_msg_id=message.msg_id,
-        )
+    timestamp=datetime.now(),
+    acknowledged_msg_id=message.msg_id,
+)
 
         send_message_to_agent(
             destination=envelope.sender,
