@@ -18,6 +18,7 @@ from uagents_core.contrib.protocols.chat import (
     ChatMessage,
     ChatAcknowledgement,
     TextContent,
+    EndSessionContent,
 )
 from uagents_core.envelope import Envelope
 from uagents_core.utils.messages import parse_envelope, send_message_to_agent
@@ -847,6 +848,86 @@ def json_safe(value):
 
     return value
 
+@app.post("/")
+async def agentverse_chat(envelope: Envelope):
+    try:
+        message = parse_envelope(envelope, ChatMessage)
+
+        if isinstance(message, ChatAcknowledgement):
+            print("Received acknowledgement — ignoring")
+            return {"status": "ok"}
+
+        if not isinstance(message, ChatMessage):
+            print(f"Received unsupported message type: {type(message)}")
+            return {"status": "ok"}
+
+        user_text = ""
+
+        for content in message.content:
+            if isinstance(content, TextContent):
+                user_text += content.text
+
+        user_text = user_text.strip()
+
+        if not user_text:
+            print("Received empty ChatMessage — ignoring")
+            return {"status": "ok"}
+
+        print(f"Received Agentverse message: {user_text}")
+
+        acknowledgement = ChatAcknowledgement(
+            timestamp=datetime.now(),
+            acknowledged_msg_id=message.msg_id,
+        )
+
+        send_message_to_agent(
+            destination=envelope.sender,
+            msg=acknowledgement,
+            sender=identity,
+        )
+
+        calculation = calculate_expense_total(user_text)
+
+        if calculation:
+            prompt = f"""
+The user said: "{user_text}"
+
+Use this verified calculation:
+{calculation["calculation"]}
+
+The correct total is {calculation["total"]}.
+Respond briefly. Confirm the total and provide one practical budgeting tip.
+Do not calculate the total yourself.
+"""
+        else:
+            prompt = user_text
+
+        reply = ask_asi_one(prompt)
+
+        response_message = ChatMessage(
+            timestamp=datetime.now(),
+            msg_id=str(uuid.uuid4()),
+            content=[
+                TextContent(type="text", text=reply),
+                EndSessionContent(type="end-session"),
+            ],
+        )
+
+        send_message_to_agent(
+            destination=envelope.sender,
+            msg=response_message,
+            sender=identity,
+        )
+
+        print("Sent Agentverse reply")
+
+        return {"status": "ok"}
+
+    except Exception:
+        import traceback
+        print(traceback.format_exc())
+        return {"status": "error"}
+
 
 def run_tool(tool_name, arguments):
     try:
@@ -1646,84 +1727,6 @@ Do not calculate the total yourself.
             ),
             "currency": get_currency()
         }
-
-
-@app.post("/")
-async def agentverse_chat(envelope: Envelope):
-    try:
-        message = parse_envelope(envelope, ChatMessage)
-
-        if isinstance(message, ChatAcknowledgement):
-            print("Received acknowledgement — ignoring")
-            return {"status": "ok"}
-
-        if not isinstance(message, ChatMessage):
-            print(f"Received unsupported message type: {type(message)}")
-            return {"status": "ok"}
-
-        user_text = ""
-
-        for content in message.content:
-            if isinstance(content, TextContent):
-                user_text += content.text
-
-        user_text = user_text.strip()
-
-        if not user_text:
-            print("Received empty ChatMessage — ignoring")
-            return {"status": "ok"}
-
-        print(f"Received Agentverse message: {user_text}")
-
-        acknowledgement = ChatAcknowledgement(
-            timestamp=datetime.now(),
-            acknowledged_msg_id=message.msg_id,
-        )
-
-        send_message_to_agent(
-            destination=envelope.sender,
-            msg=acknowledgement,
-            sender=identity,
-        )
-
-        calculation = calculate_expense_total(user_text)
-
-        if calculation:
-            prompt = f"""
-The user said: "{user_text}"
-
-Use this verified calculation:
-{calculation["calculation"]}
-
-The correct total is {calculation["total"]}.
-Respond briefly. Confirm the total and provide one practical budgeting tip.
-Do not calculate the total yourself.
-"""
-        else:
-            prompt = user_text
-
-        reply = ask_asi_one(prompt)
-
-        response_message = ChatMessage(
-            timestamp=datetime.now(),
-            msg_id=str(uuid.uuid4()),
-            content=[TextContent(type="text", text=reply)],
-        )
-
-        send_message_to_agent(
-            destination=envelope.sender,
-            msg=response_message,
-            sender=identity,
-        )
-
-        print("Sent Agentverse reply")
-
-        return {"status": "ok"}
-
-    except Exception:
-        import traceback
-        print(traceback.format_exc())
-        return {"status": "error"}
 
 
 @app.get("/dashboard")
