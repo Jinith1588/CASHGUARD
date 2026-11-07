@@ -848,6 +848,9 @@ def json_safe(value):
 
     return value
 
+replied_sessions = set()
+
+
 @app.post("/")
 async def agentverse_chat(envelope: Envelope):
     try:
@@ -861,6 +864,7 @@ async def agentverse_chat(envelope: Envelope):
             print(f"Received unsupported message type: {type(message)}")
             return {"status": "ok"}
 
+        session_id = str(envelope.session)
         user_text = ""
 
         for content in message.content:
@@ -872,6 +876,12 @@ async def agentverse_chat(envelope: Envelope):
         if not user_text:
             print("Received empty ChatMessage — ignoring")
             return {"status": "ok"}
+
+        if session_id in replied_sessions:
+            print(f"Ignoring repeat message in session: {session_id}")
+            return {"status": "ok"}
+
+        replied_sessions.add(session_id)
 
         print(f"Received Agentverse message: {user_text}")
 
