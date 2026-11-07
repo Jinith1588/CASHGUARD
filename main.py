@@ -1655,16 +1655,44 @@ async def agentverse_chat(envelope: Envelope):
 
         reply = ask_asi_one(user_text)
 
-        return ChatMessage(
+        response_message = ChatMessage(
             timestamp=datetime.now(),
             msg_id=str(uuid.uuid4()),
             content=[TextContent(type="text", text=reply)],
         )
 
+        return Envelope(
+            version=envelope.version,
+            sender=envelope.target,
+            target=envelope.sender,
+            session=envelope.session,
+            schema_digest=envelope.schema_digest,
+            content=response_message,
+        )
+
     except Exception:
         import traceback
         print(traceback.format_exc())
-        return {"status": "error"}
+
+        fallback_message = ChatMessage(
+            timestamp=datetime.now(),
+            msg_id=str(uuid.uuid4()),
+            content=[
+                TextContent(
+                    type="text",
+                    text="Sorry, I had trouble understanding that. Please try again.",
+                )
+            ],
+        )
+
+        return Envelope(
+            version=envelope.version,
+            sender=envelope.target,
+            target=envelope.sender,
+            session=envelope.session,
+            schema_digest=envelope.schema_digest,
+            content=fallback_message,
+        )
 
 @app.get("/dashboard")
 def dashboard():
