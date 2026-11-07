@@ -1603,12 +1603,14 @@ async def agent_chat(envelope: Envelope):
             content=[TextContent(type="text", text=reply)],
         )
 
-        return Envelope(
-            version=1,
-            sender=envelope.target,
-            target=envelope.sender,
-            content=response_message,
+        send_message_to_agent(
+            destination=envelope.sender,
+            msg=response_message,
+            sender=identity,
         )
+
+        return {"status": "ok"}
+
 
     except Exception:
         import traceback
@@ -1625,12 +1627,7 @@ async def agent_chat(envelope: Envelope):
             ],
         )
 
-        return Envelope(
-            version=1,
-            sender=envelope.target,
-            target=envelope.sender,
-            content=fallback_message,
-        )
+        return {"status": "error"}
 
 from typing import cast
 from uagents_core.utils.messages import parse_envelope, send_message_to_agent
