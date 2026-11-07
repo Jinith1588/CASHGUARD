@@ -1662,6 +1662,20 @@ async def agentverse_chat(envelope: Envelope):
         else:
             user_text = str(message)
 
+        print(f"Received Agentverse message: {user_text}")
+
+        acknowledgement = ChatAcknowledgement(
+            timestamp=datetime.now(),
+            msg_id=str(uuid.uuid4()),
+            acknowledged_msg_id=message.msg_id,
+        )
+
+        send_message_to_agent(
+            destination=envelope.sender,
+            msg=acknowledgement,
+            sender=identity,
+        )
+
         calculation = calculate_expense_total(user_text)
 
         if calculation:
@@ -1691,6 +1705,8 @@ Do not calculate the total yourself.
             msg=response_message,
             sender=identity,
         )
+
+        print("Sent Agentverse reply")
 
         return {"status": "ok"}
 
